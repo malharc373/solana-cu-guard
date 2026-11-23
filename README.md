@@ -6,7 +6,18 @@ A GitHub Action that fails a pull request when a Solana program's compute units 
 
 Compute units decide whether a transaction fits in its budget, what it pays in priority fees, and how much room a composing program has left for CPIs. They creep up one `msg!`, one `find_program_address` or one extra deserialization at a time, and nothing in a normal test suite notices. Mollusk's bencher already writes a table with deltas to a local file, but nothing turns that into a pass or fail on a pull request. This action does.
 
-<!-- DEMO -->
+## Demo
+
+[malharc373/solana-pinocchio-counter#1](https://github.com/malharc373/solana-pinocchio-counter/pull/1) makes the counter verify its PDA with `find_program_address` instead of the bump stored in the account. The behaviour is identical, so all 11 tests pass. The guard fails the PR and comments:
+
+| Instruction | Base | Head | Change | |
+|---|---:|---:|---:|:---:|
+| `increment` | 331 | 1,686 | +1,355 (+409.4%) | 🔴 |
+| `decrement` | 323 | 1,677 | +1,354 (+419.2%) | 🔴 |
+| `close` | 345 | 1,699 | +1,354 (+392.5%) | 🔴 |
+| `initialize` | 3,004 | 3,004 | 0 |  |
+
+The base numbers were built on the GitHub runner from the base commit and match a local run exactly. That is what makes a threshold of 0 work.
 
 ## How it works
 
