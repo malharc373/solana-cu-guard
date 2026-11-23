@@ -1,0 +1,56 @@
+# Example: guard a LiteSVM-tested program against compute-unit regressions.
+# Copy to .github/workflows/compute-units.yml and adjust the two report commands.
+#
+# The report is built twice in the same job: once from the pull request and once
+# from the base commit, with the same toolchain. Comparing against numbers made
+# on the same runner and toolchain means a Solana or LiteSVM upgrade can't fail
+# unrelated pull requests.
+
+name: Compute units
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # for the comment; fork PRs get a read-only token and fall back to the job summary
+
+env:
+  SOLANA_VERSION: v3.1.10
+
+jobs:
+  compute-units:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the base commit is needed for the worktree below
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Report from the pull request
+        run: |
+          cargo build-sbf
+          cargo test --test cu_report
+          cp target/cu-report.json "$RUNNER_TEMP/head.json"
+
+      - name: Report from the base branch
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/base"
+          # The first pull request that adds the report has no baseline yet.
+          if [ -f tests/cu_report.rs ]; then
+            cargo build-sbf
+            cargo test --test cu_report
+            cp target/cu-report.json "$RUNNER_TEMP/base.json"
+          fi
+
+      - uses: malharc373/solana-cu-guard@v1
+        with:
+          base: ${{ runner.temp }}/base.json
+          head: ${{ runner.temp }}/head.json

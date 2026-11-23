@@ -1,0 +1,16 @@
+{
+  "name": "solana-cu-guard",
+  "version": "1.0.0",
+  "description": "Fail a pull request when a Solana program's compute units go up.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "cu-guard": "bin/cu-guard.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

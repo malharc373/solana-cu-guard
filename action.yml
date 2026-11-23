@@ -1,0 +1,56 @@
+name: Solana CU Guard
+description: Fail a pull request when a Solana program's compute units go up, and show a per-instruction table.
+branding:
+  icon: activity
+  color: purple
+
+inputs:
+  head:
+    description: Path to the compute-unit report produced by the pull request's code.
+    required: true
+  base:
+    description: Path to the report produced by the base branch's code. If the file does not exist, the action only shows current values and passes.
+    required: false
+    default: ""
+  format:
+    description: Report format, auto, json or mollusk (a compute_units.md written by mollusk-svm-bencher).
+    required: false
+    default: auto
+  threshold-pct:
+    description: Allowed increase per instruction, in percent of the base value.
+    required: false
+    default: "0"
+  threshold-cu:
+    description: Allowed increase per instruction, in compute units. The larger of the two allowances applies.
+    required: false
+    default: "0"
+  fail-on-regression:
+    description: Fail the step when any instruction goes over its allowance.
+    required: false
+    default: "true"
+  comment:
+    description: Pull-request comment, always, changes (only when something changed; an existing comment is always kept up to date) or never.
+    required: false
+    default: changes
+  title:
+    description: Heading of the table. Use a different title for each program when one workflow guards several.
+    required: false
+    default: Compute units
+  github-token:
+    description: Token used to post the comment. Needs pull-requests write permission.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  regressions:
+    description: Number of instructions over their allowance.
+  improvements:
+    description: Number of instructions that got cheaper.
+  changed:
+    description: true if any instruction changed, was added or was removed.
+  markdown:
+    description: The rendered markdown table.
+
+runs:
+  using: node24
+  main: src/main.js

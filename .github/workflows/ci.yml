@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm test
+
+  # Runs the action itself against the fixtures and checks its outputs.
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: A regression fails the step
+        id: regression
+        continue-on-error: true
+        uses: ./
+        with:
+          base: test/fixtures/base.json
+          head: test/fixtures/head.json
+          title: Self-test (regression)
+          comment: never
+
+      - name: Within the allowance passes
+        id: allowed
+        uses: ./
+        with:
+          base: test/fixtures/base.json
+          head: test/fixtures/head.json
+          threshold-pct: 60
+          title: Self-test (allowance)
+          comment: never
+
+      - name: No baseline passes
+        id: nobase
+        uses: ./
+        with:
+          base: does-not-exist.json
+          head: test/fixtures/mollusk_single.md
+          title: Self-test (no baseline)
+          comment: never
+
+      - name: Check outputs
+        env:
+          OUTCOME: ${{ steps.regression.outcome }}
+          REGRESSIONS: ${{ steps.regression.outputs.regressions }}
+          IMPROVEMENTS: ${{ steps.regression.outputs.improvements }}
+          ALLOWED: ${{ steps.allowed.outputs.regressions }}
+          NOBASE: ${{ steps.nobase.outputs.regressions }}
+          CHANGED: ${{ steps.nobase.outputs.changed }}
+        run: |
+          set -x
+          test "$OUTCOME" = failure
+          test "$REGRESSIONS" = 1
+          test "$IMPROVEMENTS" = 1
+          test "$ALLOWED" = 0
+          test "$NOBASE" = 0
+          test "$CHANGED" = true
