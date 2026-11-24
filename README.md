@@ -27,7 +27,8 @@ pull request ──build──▶ report (head) ──┐
 base commit ───build──▶ report (base) ──┘                 step fails on a regression
 ```
 
-- **Both reports are built in the same job.** The base report comes from a `git worktree` of the PR's base commit, with the same toolchain and on the same runner. A committed baseline file would drift as soon as you upgrade Solana or LiteSVM, and every unrelated PR would fail.
+- **Both reports are built in the same job.** The base report comes from a `git worktree` of the base commit, with the same toolchain and on the same runner. A committed baseline file would drift as soon as you upgrade Solana or LiteSVM, and every unrelated PR would fail.
+- **The base is the merge commit's first parent** (`HEAD^1`), not `pull_request.base.sha`. That event field can lag behind the target branch, and then the PR gets blamed for changes that landed on `main` in the meantime.
 - **The action only compares.** It runs no Rust and installs nothing, so it works with LiteSVM, Mollusk, `solana-program-test`, or anything that can write a JSON file.
 - **No dependencies.** It's plain Node 24 with the built-in `fetch`, so there's no `node_modules` or bundle to audit.
 
@@ -48,13 +49,41 @@ fn write_cu_report() {
 
 A full example is [`tests/cu_report.rs`](https://github.com/malharc373/solana-pinocchio-counter/blob/main/tests/cu_report.rs) in solana-pinocchio-counter.
 
-**2. Add the workflow.** Copy [`examples/litesvm.yml`](examples/litesvm.yml) to `.github/workflows/`. It builds the report from the PR and from the base commit, then runs:
+**2. Add the workflow** as `.github/workflows/compute-units.yml` ([`examples/litesvm.yml`](examples/litesvm.yml)):
+
+```yaml
+name: Compute units
+on: pull_request
+jobs:
+  cu-guard:
+    permissions:
+      contents: read
+      pull-requests: write # for the comment
+    uses: malharc373/solana-cu-guard/.github/workflows/compare.yml@v1
+    with:
+      solana-version: v3.1.10
+      command: cargo build-sbf && cargo test --test cu_report
+      report: target/cu-report.json
+      requires: tests/cu_report.rs
+```
+
+| Workflow input | Default | |
+|---|---|---|
+| `command` | required | Builds the program and writes the report. Runs once on the base commit and once on the change. |
+| `report` | `target/cu-report.json` | The file it writes. |
+| `requires` | `""` | A file the command needs. If the base commit doesn't have it yet, there is no baseline and the check passes. Any other failure on the base commit fails the check, so a broken baseline can't hide a regression. |
+| `solana-version` | `""` | Solana release to install, or empty for none. |
+| `id` | `default` | Give each program its own `id` and `title` when one workflow guards several. |
+
+`format`, `threshold-pct`, `threshold-cu`, `comment` and `title` are passed to the action.
+
+Building the reports some other way? Use the action on its own:
 
 ```yaml
 - uses: malharc373/solana-cu-guard@v1
   with:
-    base: ${{ runner.temp }}/base.json
-    head: ${{ runner.temp }}/head.json
+    base: base.json
+    head: head.json
 ```
 
 ## Report formats
@@ -68,7 +97,7 @@ A full example is [`tests/cu_report.rs`](https://github.com/malharc373/solana-pi
 
 For Mollusk, run `cargo bench` in each checkout and point `base` and `head` at the two `benches/compute_units.md` files.
 
-## Inputs
+## Action inputs
 
 | Input | Default | |
 |---|---|---|
@@ -88,8 +117,11 @@ Outputs: `regressions`, `improvements`, `changed` and `markdown`.
 
 ## Security
 
-- The workflow uses `pull_request`, never `pull_request_target`. A PR's code runs during the build, so it must not see a write token or secrets. With `pull_request`, PRs from forks get a read-only token: the comment fails with 403, the action logs a warning, and the table stays in the job summary.
-- The comment is found by a hidden marker (`<!-- cu-guard:<title> -->`) and edited in place, so every push updates one comment instead of adding a new one.
+- **The code under test never sees a write token.** The reusable workflow has two jobs. `measure` runs the pull request's code with `contents: read` and no stored git credentials. `compare` can write comments, and it only downloads the two reports and runs the action. If you write your own workflow, keep that split.
+- **Use `pull_request`, never `pull_request_target`.** PRs from forks then get a read-only token: the comment fails with 403, the action logs a warning, and the table stays in the job summary.
+- **Reports are untrusted input.** Instruction names with control characters are rejected, names are escaped in the table, and the table is logged with workflow commands turned off.
+- **One comment, edited in place.** It is found by a hidden marker, and only if a bot or someone with write access wrote it, so a pasted marker can't redirect it.
+- **What it can't do:** a pull request controls its own test code, so it could write a false report. This is a check against accidents, and review still has to catch a changed `cu_report` test.
 
 ## Local use
 
@@ -105,7 +137,7 @@ It prints the same markdown and exits 1 on a regression.
 npm test
 ```
 
-21 unit tests cover the parsers (including fixtures in Mollusk's exact output format), the comparison and thresholds, rendering, and the comment upsert against a fake API. CI also runs the action itself (`uses: ./`) on the fixtures and checks its outputs.
+26 unit tests cover the parsers (including fixtures in Mollusk's exact output format), the comparison and thresholds, rendering, hostile input, and the comment upsert against a fake API. CI also runs the action (`uses: ./`) and the reusable workflow on the fixtures.
 
 ## License
 

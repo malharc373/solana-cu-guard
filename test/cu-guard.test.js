@@ -145,7 +145,7 @@ test("creates a comment when none exists", async () => {
 
 test("updates its own comment found on a later page", async () => {
   const full = Array.from({ length: 100 }, (_, i) => ({ id: i, body: "x" }));
-  const { calls, fetchImpl } = fakeApi([full, [{ id: 555, body: "<!-- cu-guard:t -->\nold" }]]);
+  const { calls, fetchImpl } = fakeApi([full, [{ id: 555, body: "<!-- cu-guard:t -->\nold", user: { type: "Bot" } }]]);
   assert.equal(await upsertComment({ ...args, body: "new", fetchImpl }), "updated");
   assert.equal(calls.at(-1).url, "https://api/repos/o/r/issues/comments/555");
   assert.equal(calls.at(-1).method, "PATCH");
@@ -160,4 +160,37 @@ test("does not create a comment when told not to", async () => {
 test("surfaces the HTTP status so a fork's 403 can be handled", async () => {
   const fetchImpl = async () => ({ ok: false, status: 403 });
   await assert.rejects(upsertComment({ ...args, body: "x", fetchImpl }), (e) => e.status === 403);
+});
+
+test("ignores a marker pasted by an outside commenter", async () => {
+  const body = "<!-- cu-guard:t -->\nforged";
+  const outsider = fakeApi([[{ id: 9, body, user: { type: "User" }, author_association: "CONTRIBUTOR" }]]);
+  assert.equal(await upsertComment({ ...args, body: "x", fetchImpl: outsider.fetchImpl }), "created");
+  const owner = fakeApi([[{ id: 9, body, user: { type: "User" }, author_association: "OWNER" }]]);
+  assert.equal(await upsertComment({ ...args, body: "x", fetchImpl: owner.fetchImpl }), "updated");
+});
+
+test("rejects names that could inject markdown or workflow commands", () => {
+  assert.throws(() => parseReport(JSON.stringify({ "a\n::error::x": 1 })), /control characters/);
+  assert.throws(() => parseReport(JSON.stringify({ "a\r\n# hi": 1 })), /control characters/);
+  assert.throws(() => parseReport(JSON.stringify({ ["x".repeat(201)]: 1 })), /200 characters/);
+});
+
+test("rejects strings that Number() would quietly turn into 0", () => {
+  for (const cu of ["", " ", "1e3", "0x10", "-"]) assert.throws(() => parseReport(JSON.stringify([{ name: "x", cu }])), /non-negative integer/);
+});
+
+test("a huge table is cut to fit a comment, keeping regressions", () => {
+  const base = {}, head = {};
+  for (let i = 0; i < 3000; i++) base[`instruction_number_${i}`] = head[`instruction_number_${i}`] = 1000;
+  head.instruction_number_2999 = 1001;
+  const md = render(compare(r(base), r(head)));
+  assert.ok(md.length <= 65_536);
+  assert.match(md, /instruction_number_2999.*🔴/);
+  assert.match(md, /\d+ more rows not shown\./);
+  assert.match(md, /cu-guard\]\(https/);
+});
+
+test("a title cannot close the hidden marker", () => {
+  assert.equal(marker("a ---> b").indexOf("-->"), marker("a ---> b").length - 3);
 });

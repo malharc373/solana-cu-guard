@@ -69,7 +69,9 @@ const cells = (line) => line.split("|").slice(1, -1).map((c) => c.trim());
 
 function entry(name, cu) {
   if (typeof name !== "string" || name.trim() === "") throw new Error(`invalid instruction name: ${JSON.stringify(name)}`);
-  const n = typeof cu === "string" ? Number(cu.replaceAll(",", "")) : cu;
+  // Names come from the pull request's code and end up in a comment and in the log.
+  if (/[\u0000-\u001f\u007f\u2028\u2029]/.test(name) || name.length > 200) throw new Error("instruction names must be at most 200 characters with no control characters");
+  const n = typeof cu === "string" ? (/^[\d,]+$/.test(cu) ? Number(cu.replaceAll(",", "")) : NaN) : cu;
   if (!Number.isSafeInteger(n) || n < 0) throw new Error(`"${name}": compute units must be a non-negative integer, got ${JSON.stringify(cu)}`);
   return { name: name.trim(), cu: n };
 }

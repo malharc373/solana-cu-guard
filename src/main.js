@@ -26,6 +26,9 @@ function setOutput(name, value) {
   appendFileSync(file, `${name}<<${delimiter}\n${value}\n${delimiter}\n`);
 }
 
+// Escaping for the message part of a workflow command.
+const escape = (text) => text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+
 async function run() {
   const headPath = input("head");
   if (!headPath) throw new Error('input "head" is required');
@@ -45,7 +48,9 @@ async function run() {
 
   const result = compare(base, head, { thresholdPct, thresholdCu });
   const body = render(result, { title, thresholdPct, thresholdCu });
-  console.log(body);
+  // The table contains text from the pull request: print it with workflow commands off.
+  const stop = randomUUID();
+  console.log(`::stop-commands::${stop}\n${body}\n::${stop}::`);
 
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
   setOutput("regressions", String(result.regressions));
@@ -56,7 +61,7 @@ async function run() {
   await maybeComment(body, title, commentMode, result.changed || result.regressions > 0);
 
   for (const r of result.rows.filter((r) => r.status === "regression")) {
-    console.log(`::error title=Compute units went up::${r.name}: ${r.base} → ${r.head} CU (+${r.delta})`);
+    console.log(`::error title=Compute units went up::${escape(`${r.name}: ${r.base} → ${r.head} CU (+${r.delta})`)}`);
   }
   if (result.regressions > 0 && failOnRegression) process.exitCode = 1;
 }
@@ -92,6 +97,6 @@ async function maybeComment(body, title, mode, interesting) {
 }
 
 run().catch((e) => {
-  console.log(`::error::${e.message}`);
+  console.log(`::error::${escape(e.message)}`);
   process.exitCode = 1;
 });

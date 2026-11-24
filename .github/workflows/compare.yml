@@ -1,0 +1,126 @@
+# Reusable workflow: builds the compute-unit report from the pull request and
+# from its base, then compares them. See the README for a 10-line caller.
+#
+# Two jobs on purpose. `measure` runs the pull request's code and has a
+# read-only token. `compare` may write the comment and runs none of that code.
+
+name: Compare compute units
+
+on:
+  workflow_call:
+    inputs:
+      command:
+        description: Shell command that builds the program and writes the report.
+        type: string
+        required: true
+      report:
+        description: Path of the report the command writes.
+        type: string
+        default: target/cu-report.json
+      requires:
+        description: File the command needs (usually the test that writes the report). If the base commit doesn't have it, there is no baseline and the check passes. Without this input, a command that fails on the base commit fails the check.
+        type: string
+        default: ""
+      solana-version:
+        description: Solana release to install, for example v3.1.10. Empty installs nothing.
+        type: string
+        default: ""
+      format:
+        type: string
+        default: auto
+      threshold-pct:
+        type: string
+        default: "0"
+      threshold-cu:
+        type: string
+        default: "0"
+      comment:
+        type: string
+        default: changes
+      title:
+        type: string
+        default: Compute units
+      id:
+        description: Set a different id for each program when one workflow guards several.
+        type: string
+        default: default
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SOLANA_VERSION: ${{ inputs.solana-version }}
+      COMMAND: ${{ inputs.command }}
+      REPORT: ${{ inputs.report }}
+      REQUIRES: ${{ inputs.requires }}
+    steps:
+      # On pull_request this is the merge commit, so its first parent is exactly
+      # the base that the pull request is merged into.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Cache cargo and Solana tools
+        if: inputs.solana-version != ''
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cache/solana
+            ~/.local/share/solana
+          key: ${{ runner.os }}-cu-guard-${{ inputs.solana-version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Solana CLI
+        if: inputs.solana-version != ''
+        run: |
+          [ -x "$HOME/.local/share/solana/install/active_release/bin/solana" ] || \
+            sh -c "$(curl -sSfL "https://release.anza.xyz/${SOLANA_VERSION}/install")"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Report from the base commit
+        run: |
+          mkdir -p "$RUNNER_TEMP/reports"
+          git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+          cd "$RUNNER_TEMP/base"
+          if [ -n "$REQUIRES" ] && [ ! -e "$REQUIRES" ]; then
+            echo "::notice::The base commit has no $REQUIRES, so there is no baseline yet."
+            exit 0
+          fi
+          bash -euo pipefail -c "$COMMAND"
+          cp "$REPORT" "$RUNNER_TEMP/reports/base"
+
+      - name: Report from this change
+        run: |
+          bash -euo pipefail -c "$COMMAND"
+          cp "$REPORT" "$RUNNER_TEMP/reports/head"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cu-guard-${{ inputs.id }}
+          path: ${{ runner.temp }}/reports
+          retention-days: 7
+
+  compare:
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: cu-guard-${{ inputs.id }}
+          path: cu-guard-reports
+
+      - uses: malharc373/solana-cu-guard@v1
+        with:
+          base: cu-guard-reports/base
+          head: cu-guard-reports/head
+          format: ${{ inputs.format }}
+          threshold-pct: ${{ inputs.threshold-pct }}
+          threshold-cu: ${{ inputs.threshold-cu }}
+          comment: ${{ inputs.comment }}
+          title: ${{ inputs.title }}

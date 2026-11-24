@@ -1,6 +1,6 @@
 {
   "name": "solana-cu-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Fail a pull request when a Solana program's compute units go up.",
   "type": "module",
   "license": "MIT",

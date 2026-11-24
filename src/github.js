@@ -15,7 +15,7 @@ export async function upsertComment({ body, marker, token, repo, pr, api = "http
     const res = await fetchImpl(`${base}?per_page=100&page=${page}`, { headers });
     if (!res.ok) throw new HttpError(res.status, `listing comments failed: ${res.status}`);
     const comments = await res.json();
-    existing = comments.find((c) => typeof c.body === "string" && c.body.startsWith(marker)) ?? null;
+    existing = comments.find((c) => typeof c.body === "string" && c.body.startsWith(marker) && trusted(c)) ?? null;
     if (comments.length < 100) break;
   }
 
@@ -29,6 +29,10 @@ export async function upsertComment({ body, marker, token, repo, pr, api = "http
   if (!res.ok) throw new HttpError(res.status, `${existing ? "updating" : "creating"} the comment failed: ${res.status}`);
   return existing ? "updated" : "created";
 }
+
+// Anyone can paste the marker into a comment, so only edit comments written by a
+// bot (the default token) or by someone with write access (a personal token).
+const trusted = (c) => c.user?.type === "Bot" || ["OWNER", "MEMBER", "COLLABORATOR"].includes(c.author_association);
 
 export class HttpError extends Error {
   constructor(status, message) {

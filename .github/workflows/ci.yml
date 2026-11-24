@@ -66,3 +66,15 @@ jobs:
           test "$ALLOWED" = 0
           test "$NOBASE" = 0
           test "$CHANGED" = true
+
+  # The reusable workflow, with a command that needs no toolchain.
+  reusable-workflow:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/compare.yml
+    with:
+      command: mkdir -p target && cp test/fixtures/base.json target/cu-report.json
+      requires: test/fixtures/base.json
+      title: Self-test (reusable workflow)
+      comment: never

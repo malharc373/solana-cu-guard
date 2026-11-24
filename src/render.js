@@ -4,7 +4,7 @@ const ORDER = { regression: 0, increase: 1, improvement: 2, added: 3, removed: 4
 const fmt = (n) => n.toLocaleString("en-US");
 
 export function marker(title) {
-  return `<!-- cu-guard:${title.replaceAll("--", "-")} -->`;
+  return `<!-- cu-guard:${title.replace(/-{2,}/g, "-").replace(/[<>\r\n]/g, " ")} -->`;
 }
 
 export function render(result, { title = "Compute units", thresholdPct = 0, thresholdCu = 0 } = {}) {
@@ -35,7 +35,7 @@ export function render(result, { title = "Compute units", thresholdPct = 0, thre
     );
   }
   lines.push("", "<sub>Compute units per instruction, compared by [cu-guard](https://github.com/malharc373/solana-cu-guard).</sub>");
-  return lines.join("\n") + "\n";
+  return fit(lines);
 }
 
 const ICON = { regression: "🔴", increase: "🟡", improvement: "🟢", added: "new", removed: "removed", unchanged: "" };
@@ -53,3 +53,18 @@ function allowance(pct, cu) {
 }
 
 const cell = (s) => `\`${s.replaceAll("|", "\\|").replaceAll("`", "'")}\``;
+
+// GitHub rejects comments over 65,536 characters. Rows are sorted with
+// regressions first, so drop from the end of the table.
+const MAX = 60_000;
+function fit(lines) {
+  const footer = lines.splice(-2);
+  let dropped = 0;
+  let size = lines.reduce((n, l) => n + l.length + 1, 0) + footer.join("\n").length + 100;
+  while (size > MAX) {
+    size -= lines.pop().length + 1;
+    dropped++;
+  }
+  if (dropped > 0) lines.push("", `${dropped} more rows not shown.`);
+  return [...lines, ...footer].join("\n") + "\n";
+}
