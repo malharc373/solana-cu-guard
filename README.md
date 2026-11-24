@@ -88,7 +88,7 @@ Building the reports some other way? Use the action on its own:
     head: head.json
 ```
 
-A run builds the program twice, so expect about 4 to 6 minutes for a small program with a cold cache.
+A run builds the program twice, so expect a few minutes: 3 to 9 on the four repos that use it, with a cold cache.
 
 ## Report formats
 
