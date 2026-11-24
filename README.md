@@ -17,7 +17,9 @@ Compute units decide whether a transaction fits in its budget, what it pays in p
 | `close` | 345 | 1,699 | +1,354 (+392.5%) | 🔴 |
 | `initialize` | 3,004 | 3,004 | 0 |  |
 
-The base numbers were built on the GitHub runner from the base commit and match a local run exactly. That is what makes a threshold of 0 work.
+[malharc373/solana-counter#1](https://github.com/malharc373/solana-counter/pull/1) shows the whole cycle with the reusable workflow: one added `msg!` fails the check at +104 CU, removing it turns the check green, and the same comment is edited both times.
+
+In both, the base numbers were built on the GitHub runner from the base commit and match a local run exactly. That is what makes a threshold of 0 work.
 
 ## How it works
 
@@ -85,6 +87,8 @@ Building the reports some other way? Use the action on its own:
     base: base.json
     head: head.json
 ```
+
+A run builds the program twice, so expect about 4 to 6 minutes for a small program with a cold cache.
 
 ## Report formats
 
