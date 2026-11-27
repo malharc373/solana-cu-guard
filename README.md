@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # for the comment
-    uses: malharc373/solana-cu-guard/.github/workflows/compare.yml@v1
+    uses: malharc373/solana-cu-guard/.github/workflows/compare.yml@v1.2.0
     with:
       solana-version: v3.1.10
       command: cargo build-sbf && cargo test --test cu_report
@@ -96,7 +96,7 @@ jobs:
 Building the reports some other way? Use the action on its own:
 
 ```yaml
-- uses: malharc373/solana-cu-guard@v1
+- uses: malharc373/solana-cu-guard@v1.2.0
   with:
     base: base.json
     head: head.json
