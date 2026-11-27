@@ -1,0 +1,13 @@
+[package]
+name = "cu-report"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.79"
+description = "Write the compute-unit report that solana-cu-guard compares across pull requests"
+license = "MIT"
+repository = "https://github.com/malharc373/solana-cu-guard"
+readme = "README.md"
+keywords = ["solana", "compute-units", "ci", "litesvm", "mollusk"]
+categories = ["development-tools::testing"]
+
+[dependencies]

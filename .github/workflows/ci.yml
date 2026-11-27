@@ -78,3 +78,21 @@ jobs:
       requires: test/fixtures/base.json
       title: Self-test (reusable workflow)
       comment: never
+
+  crate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/cu-report
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Minimum supported Rust (1.79)
+        run: rustup toolchain install 1.79 --profile minimal && cargo +1.79 test
+      - run: rustup component add rustfmt clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # Includes a test that parses the crate's output with the action's own parser.
+      - run: cargo test

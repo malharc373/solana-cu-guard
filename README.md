@@ -36,16 +36,29 @@ base commit ───build──▶ report (base) ──┘                 step
 
 ## Quick start (LiteSVM)
 
-**1. Write a report** from a test. Use a **fixed keypair**: a random one moves the PDA bumps, and with them the cost of `find_program_address`, so the numbers change between runs.
+**1. Write a report** from a test. The [`cu-report`](crates/cu-report) crate writes the file and rejects names the action would reject, so mistakes fail locally:
+
+```toml
+[dev-dependencies]
+cu-report = { git = "https://github.com/malharc373/solana-cu-guard", tag = "v1.2.0" }
+```
+
+Use a **fixed keypair**: a random one moves the PDA bumps, and with them the cost of `find_program_address`, so the numbers change between runs.
 
 ```rust
 #[test]
-fn write_cu_report() {
+fn cu_report() {
     let mut svm = LiteSVM::new();
     svm.add_program(ID, include_bytes!("../target/deploy/my_program.so")).unwrap();
     let user = Keypair::new_from_array([7; 32]); // fixed: same PDAs and bumps every run
-    // ... send each instruction and record meta.compute_units_consumed ...
-    std::fs::write("target/cu-report.json", r#"{"initialize": 3004, "increment": 331}"#).unwrap();
+    svm.airdrop(&user.pubkey(), 1_000_000_000).unwrap();
+
+    let mut report = cu_report::Report::new();
+    for (name, ix) in [("initialize", initialize_ix(&user)), ("increment", increment_ix(&user))] {
+        let meta = send(&mut svm, ix, &user); // your helper: sign, send, return the metadata
+        report.record(name, meta.compute_units_consumed);
+    }
+    report.write(cu_report::default_path!()).unwrap(); // target/cu-report.json
 }
 ```
 
@@ -76,6 +89,7 @@ jobs:
 | `requires` | `""` | A file the command needs. If the base commit doesn't have it yet, there is no baseline and the check passes. Any other failure on the base commit fails the check, so a broken baseline can't hide a regression. |
 | `solana-version` | `""` | Solana release to install, or empty for none. |
 | `id` | `default` | Give each program its own `id` and `title` when one workflow guards several. |
+| `cache-build` | `true` | Cache both builds' `target` directories, so dependencies compile once instead of twice on every run. |
 
 `format`, `threshold-pct`, `threshold-cu`, `comment` and `title` are passed to the action.
 

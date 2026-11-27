@@ -44,6 +44,10 @@ on:
         description: Set a different id for each program when one workflow guards several.
         type: string
         default: default
+      cache-build:
+        description: Cache both builds' target directories between runs. Dependencies then compile once instead of on every run.
+        type: boolean
+        default: true
 
 jobs:
   measure:
@@ -81,10 +85,25 @@ jobs:
             sh -c "$(curl -sSfL "https://release.anza.xyz/${SOLANA_VERSION}/install")"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
+      # The base build keeps its target directory outside the worktree (and links
+      # it in), so restoring the cache can't make `git worktree add` fail.
+      - name: Cache both builds
+        if: inputs.cache-build
+        uses: actions/cache@v6
+        with:
+          path: |
+            target
+            ${{ runner.temp }}/base-target
+          key: ${{ runner.os }}-cu-guard-build-${{ inputs.id }}-${{ inputs.solana-version }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-cu-guard-build-${{ inputs.id }}-${{ inputs.solana-version }}-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cu-guard-build-${{ inputs.id }}-${{ inputs.solana-version }}-
+
       - name: Report from the base commit
         run: |
-          mkdir -p "$RUNNER_TEMP/reports"
+          mkdir -p "$RUNNER_TEMP/reports" "$RUNNER_TEMP/base-target"
           git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+          ln -s "$RUNNER_TEMP/base-target" "$RUNNER_TEMP/base/target"
           cd "$RUNNER_TEMP/base"
           if [ -n "$REQUIRES" ] && [ ! -e "$REQUIRES" ]; then
             echo "::notice::The base commit has no $REQUIRES, so there is no baseline yet."
